@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:barcode_scan/barcode_scan.dart';
+import 'package:share/share.dart';
 
 class Webviewpage extends StatefulWidget {
   @override
@@ -20,16 +21,30 @@ class _WebviewpageState extends State<Webviewpage> {
   var listStringUrl = [];
   TextEditingController controller = TextEditingController();
   FlutterWebviewPlugin flutterWebviewPlugin = FlutterWebviewPlugin();
-  var urlString = "https://www.google.com";
+  var urlString = "http://dev3.lifeplusloyalty.vn/promotion";
   var urlChange = "enter Url Here";
   @override
   void initState() {
     getConnectionStatus();
-    launchUrl();
+    listenPostMess();
     flutterWebviewPlugin.onStateChanged.listen((WebViewStateChanged wvs) {
       print(wvs.type);
     });
     super.initState();
+  }
+
+  void listenPostMess() {
+    flutterWebviewPlugin.onStateChanged.listen((state) async {
+      if (state.type == WebViewState.finishLoad) {
+        String script =
+            'window.addEventListener("message", receiveMessage, false);' +
+                'function receiveMessage(event) {Android.getPostMessage(event.data);}';
+        flutterWebviewPlugin.evalJavascript(script);
+      }
+      flutterWebviewPlugin.lightningLinkStream.listen((message) {
+        launchUrl(message);
+      });
+    });
   }
 
   //camera
@@ -75,7 +90,7 @@ class _WebviewpageState extends State<Webviewpage> {
   }
 
   //launchUrl
-  void launchUrl() {
+  void launchUrl(String urlString) {
     setState(() {
       if (boolHasConnection == true) {
         listStringUrl = urlString.split(":");
@@ -89,12 +104,25 @@ class _WebviewpageState extends State<Webviewpage> {
               break;
             case "qrcode":
               {
-                qrCode();
+                Navigator.pushReplacementNamed(
+                  context,
+                  '/qrpages',
+                );
+              }
+              break;
+            case "popup":
+              {
+                flutterWebviewPlugin.reloadUrl("https://${listStringUrl[1]}");
+              }
+              break;
+
+            case "share":
+              {
+                Share.share(listStringUrl[1]);
               }
               break;
           }
         }
-        flutterWebviewPlugin.reloadUrl(urlString);
       }
     });
   }
@@ -131,32 +159,6 @@ class _WebviewpageState extends State<Webviewpage> {
   Widget build(BuildContext context) {
     return boolHasConnection
         ? WebviewScaffold(
-            // appBar: new AppBar(
-            //   title: TextField(
-            //     cursorColor: Colors.blueAccent,
-            //     controller: controller,
-            //     textInputAction: TextInputAction.go,
-            //     onSubmitted: (urlString) => launchUrl(),
-            //     style: TextStyle(color: Colors.white),
-            //     decoration: InputDecoration(
-            //       border: InputBorder.none,
-            //       hintText: "${urlChange}",
-            //       hintStyle: TextStyle(color: Colors.white),
-            //     ),
-            //     onChanged: (String urlString) {
-            //       setState(() {
-            //         urlString = urlChange;
-            //       });
-            //     },
-            //   ),
-            //   actions: <Widget>[
-            //     IconButton(
-            //         icon: Icon(Icons.navigate_next),
-            //         onPressed: () {
-            //           launchUrl();
-            //         })
-            //   ],
-            // ),
             url: urlString,
             withZoom: false,
           )

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import './splasScreen/splasScreen.dart';
 import './webviewPages/webviewPages.dart';
 import './QrcodeandBarcode/scannerCode.dart';
+import 'package:share/share.dart';
 void main() {
   // debugPaintSizeEnabled = true;
   // debugPaintBaselinesEnabled = true;
