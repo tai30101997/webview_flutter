@@ -2,11 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_webview_plugin/flutter_webview_plugin.dart';
 import 'package:connectivity/connectivity.dart';
 import 'dart:async';
-import 'package:image_picker/image_picker.dart';
 import 'dart:io';
-import 'package:flutter/services.dart';
-import 'package:barcode_scan/barcode_scan.dart';
-import 'package:share/share.dart';
+import 'package:provider/provider.dart';
+import './webview_bloc.dart';
+
+class WebView extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+        child: Provider<WebviewBloc>.value(
+      value: WebviewBloc(),
+      child: Webviewpage(),
+    ));
+  }
+}
 
 class Webviewpage extends StatefulWidget {
   @override
@@ -15,8 +24,10 @@ class Webviewpage extends StatefulWidget {
 
 class _WebviewpageState extends State<Webviewpage> {
   String result = "";
+  WebviewBloc webviewBloc = WebviewBloc();
   File _image;
   StreamSubscription<ConnectivityResult> streamConnectionStatus;
+  StreamSubscription<bool> _listenQRcode;
   bool boolHasConnection = true;
   var listStringUrl = [];
   TextEditingController controller = TextEditingController();
@@ -25,129 +36,56 @@ class _WebviewpageState extends State<Webviewpage> {
   var urlChange = "enter Url Here";
   @override
   void initState() {
-    getConnectionStatus();
-    listenPostMess();
     flutterWebviewPlugin.onStateChanged.listen((WebViewStateChanged wvs) {
       print(wvs.type);
     });
+    webviewBloc.listenPostMess();
     super.initState();
   }
-
-  void listenPostMess() {
-    flutterWebviewPlugin.onStateChanged.listen((state) async {
-      if (state.type == WebViewState.finishLoad) {
-        String script =
-            'window.addEventListener("message", receiveMessage, false);' +
-                'function receiveMessage(event) {Android.getPostMessage(event.data);}';
-        flutterWebviewPlugin.evalJavascript(script);
-      }
-      flutterWebviewPlugin.lightningLinkStream.listen((message) {
-        launchUrl(message);
-      });
-    });
-  }
-
-  //camera
-  Future openCamera(bool isCamera) async {
-    File image;
-    if (isCamera) {
-      image = await ImagePicker.pickImage(source: ImageSource.camera);
-    } else {
-      image = await ImagePicker.pickImage(source: ImageSource.gallery);
-    }
-    setState(() {
-      _image = image;
-    });
-  }
-
-  //qrCode
-  Future qrCode() async {
-    try {
-      String qrResult = await BarcodeScanner.scan();
-      setState(() {
-        result = qrResult;
-      });
-    } on PlatformException catch (ex) {
-      if (ex.code == BarcodeScanner.CameraAccessDenied) {
-        setState(() {
-          result = "Camera permission was denied";
-        });
-      } else {
-        setState(() {
-          result = "Unknown Error $ex";
-        });
-      }
-    } on FormatException {
-      setState(() {
-        result = "You pressed the back button before scanning anything";
-      });
-    } catch (ex) {
-      setState(() {
-        result = "Unknown Error $ex";
-      });
-    }
-    Navigator.pushReplacementNamed(context, '/qrpages', result: result);
-  }
-
   //launchUrl
-  void launchUrl(String urlString) {
-    setState(() {
-      if (boolHasConnection == true) {
-        listStringUrl = urlString.split(":");
-        print(listStringUrl);
-        if (listStringUrl.length > 1) {
-          switch (listStringUrl[0]) {
-            case "camera":
-              {
-                openCamera(true);
-              }
-              break;
-            case "qrcode":
-              {
-                Navigator.pushReplacementNamed(
-                  context,
-                  '/qrpages',
-                );
-              }
-              break;
-            case "popup":
-              {
-                flutterWebviewPlugin.reloadUrl("https://${listStringUrl[1]}");
-              }
-              break;
+  // void launchUrl(String urlString) {
+  //   setState(() {
+  //     if (boolHasConnection == true) {
+  //       listStringUrl = urlString.split(":");
+  //       print(listStringUrl);
+  //       if (listStringUrl.length > 1) {
+  //         switch (listStringUrl[0]) {
+  //           case "camera":
+  //             {
+  //               openCamera(true);
+  //             }
+  //             break;
+  //           case "qrcode":
+  //             {
+  //               Navigator.pushReplacementNamed(
+  //                 context,
+  //                 '/qrpages',
+  //               );
+  //             }
+  //             break;
+  //           case "popup":
+  //             {
+  //               flutterWebviewPlugin.reloadUrl("https://${listStringUrl[1]}");
+  //             }
+  //             break;
 
-            case "share":
-              {
-                Share.share(listStringUrl[1]);
-              }
-              break;
-          }
-        }
-      }
-    });
-  }
+  //           case "share":
+  //             {
+  //               Share.share(listStringUrl[1]);
+  //             }
+  //             break;
+  //         }
+  //       }
+  //     }
+  //   });
+  // }
 
   //listen connection
-  Future<Null> getConnectionStatus() async {
-    streamConnectionStatus = new Connectivity()
-        .onConnectivityChanged
-        .listen((ConnectivityResult result) {
-      if (result == ConnectivityResult.mobile ||
-          result == ConnectivityResult.wifi) {
-        setState(() {
-          boolHasConnection = true;
-        });
-      } else {
-        setState(() {
-          boolHasConnection = false;
-        });
-      }
-    });
-  }
 
   void dispose() {
     try {
       streamConnectionStatus?.cancel();
+      _listenQRcode?.cancel();
     } catch (exception, stackTrace) {
       print(exception.toString());
     } finally {
@@ -156,29 +94,88 @@ class _WebviewpageState extends State<Webviewpage> {
   }
 
   @override
+  void didChangeDependencies() {
+    // TODO: implement didChangeDependencies
+    super.didChangeDependencies();
+
+    var bloc = Provider.of<WebviewBloc>(context);
+    Provider.of<WebviewBloc>(context).getConnectionStatus();
+    Provider.of<WebviewBloc>(context).listenPostMess();
+    _listenQRcode =
+        Provider.of<WebviewBloc>(context).boolHasQrCODE.stream.listen((onData) {
+      if (onData) {
+        Navigator.pushReplacementNamed(
+          context,
+          '/qrpages',
+        );
+      } else {
+        return;
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return boolHasConnection
-        ? WebviewScaffold(
-            url: urlString,
-            withZoom: false,
-          )
-        : Scaffold(
-            body: Container(
-              color: Colors.blueGrey[50],
-              child: AlertDialog(
-                title: new Text("InternetError"),
-                content: new Text("Please check your internet"),
-                actions: <Widget>[
-                  // usually buttons at the bottom of the dialog
-                  new FlatButton(
-                    child: new Text("Close"),
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                    },
-                  ),
-                ],
-              ),
-            ),
-          );
+    return Consumer<WebviewBloc>(
+        builder: (context, bloc, child) => StreamBuilder<bool>(
+              stream: bloc.boolHasConnection.stream,
+              builder: (context, snapshot) {
+                if (snapshot.hasData) {
+                  switch (snapshot.data) {
+                    case true:
+                      return WebviewScaffold(
+                        url: urlString,
+                        withZoom: false,
+                        withLocalStorage: true,
+                        withJavascript: true,
+                        clearCache: true,
+                        withLocalUrl: true,
+                      );
+                      break;
+                    case false:
+                      return Scaffold(
+                        body: Container(
+                          width: 400,
+                          color: Colors.blueGrey[50],
+                          child: AlertDialog(
+                            title: new Text("InternetError"),
+                            content: new Text("Please check your internet"),
+                            actions: <Widget>[
+                              // usually buttons at the bottom of the dialog
+                              new FlatButton(
+                                child: new Text("Close"),
+                                onPressed: () {
+                                  Navigator.of(context).pop();
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                      break;
+                    default:
+                      return Scaffold(
+                        appBar: AppBar(
+                          title: Text('webview'),
+                        ),
+                        body: Container(
+                          width: 400,
+                          child: Text('data IN DEFAULT'),
+                        ),
+                      );
+                  }
+                } else {
+                  return Scaffold(
+                    appBar: AppBar(
+                      title: Text('webview'),
+                    ),
+                    body: Container(
+                      width: 400,
+                      child: Text('data in else'),
+                    ),
+                  );
+                }
+              },
+            ));
   }
 }
